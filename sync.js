@@ -1,33 +1,22 @@
-
 (function () {
     'use strict';
 
+    // НАЛАШТУВАННЯ JSONBin.io
     const BIN_ID = '6af1c600ac6210605a79cb20';
-    const API_KEY = '$2a$10$tPDvcNxXaQBCTxl.myb40OZc13gfYmRl.a2NxaiLYCKVy0LrU2yii';
-    const USER_ID = 'romen83';
+    const API_KEY = '$2a$10$5HmUCa8V6Q1TzUe5.D1Oeu4LfJCPdwbdWXxiUx3PJuBAou7JCo7g6';
+    const USER_ID = 'romen83'; // однаковий на планшеті й ТБ
 
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-    function showNotice(text) {
-        if (typeof Lampa !== 'undefined' && Lampa.Noty) {
-            Lampa.Noty.show(text);
-        }
-    }
-
+    // 1. Функція збереження прогресу в JSONBin
     function saveProgress(data) {
         if (!data || !data.card || !data.card.id) return;
         const movieId = String(data.card.id);
-        if (!data.time || data.time < 5) return;
-
-        showNotice('Синхронізація: Зберігаємо...');
 
         fetch(JSONBIN_URL + '/latest', {
             headers: { 'X-Master-Key': API_KEY }
         })
-        .then(res => {
-            if (!res.ok) throw new Error('Помилка читання з JSONBin: ' + res.status);
-            return res.json();
-        })
+        .then(res => res.json())
         .then(response => {
             let db = response.record || {};
             if (!db.movies) db.movies = {};
@@ -49,30 +38,44 @@
                 body: JSON.stringify(db)
             });
         })
-        .then(res => {
-            if (!res.ok) throw new Error('Помилка запису: ' + res.status);
-            showNotice('Синхронізація: Успішно збережено!');
-        })
-        .catch(err => {
-            console.error('Lampa Sync Error:', err);
-            showNotice('Помилка синхронізації (див. консоль)');
-        });
+        .catch(err => console.error('Lampa Sync Save Error:', err));
     }
 
-    // Перехоплюємо подію таймлайну Лампи
-    if (typeof Lampa !== 'undefined' && Lampa.Timeline) {
-        let originalTimelineSet = Lampa.Timeline.set;
-        Lampa.Timeline.set = function (data) {
-            if (originalTimelineSet) {
-                originalTimelineSet.apply(this, arguments);
+    // 2. Функція підтягування прогресу з JSONBin (для синхронізації на ТБ)
+    function restoreProgress(card) {
+        if (!card || !card.id) return;
+        const movieId = String(card.id);
+
+        fetch(JSONBIN_URL + '/latest', {
+            headers: { 'X-Master-Key': API_KEY }
+        })
+        .then(res => res.json())
+        .then(response => {
+            let db = response.record || {};
+            if (!db.movies || !db.movies[movieId]) return;
+
+            let item = db.movies[movieId];
+            if (item.time && item.time > 5) {
+                Lampa.Storage.set('time_' + movieId, item.time);
             }
-            if (data && data.card && data.card.id) {
-                saveProgress({
-                    card: data.card,
-                    time: data.time,
-                    duration: data.duration
-                });
-            }
-        };
+        })
+        .catch(err => console.error('Lampa Sync Load Error:', err));
     }
+
+    // Слідкуємо за завершенням зовнішніх плеєрів (MX Player, Just Player тощо)
+    Lampa.Listener.follow('activity', function (e) {
+        if (e.type === 'start' && e.object && e.object.card) {
+            restoreProgress(e.object.card);
+        }
+    });
+
+    Lampa.Player.listener.follow('destroy', function (e) {
+        let data = {
+            card: Lampa.Player.data().movie,
+            time: Lampa.Player.position(),
+            duration: Lampa.Player.duration()
+        };
+        saveProgress(data);
+    });
+
 })();
