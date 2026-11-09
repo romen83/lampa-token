@@ -4,8 +4,7 @@
     // НАЛАШТУВАННЯ JSONBin.io
     const BIN_ID = '6af1955dffd5d16053b2fcb7';
     const API_KEY = '$2a$10$tPDvcNxXaQBCTxl.myb40OZc13gfYmRl.a2NxailYCKVyOLrU2yii';
-    const USER_ID = ''my_home_sync_2027'
-'; // однаковий на планшеті й ТБ
+    const USER_ID = 'romen83'; // однаковий на планшеті й ТБ
 
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
