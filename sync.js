@@ -1,14 +1,12 @@
 (function () {
     'use strict';
 
-    // НАЛАШТУВАННЯ JSONBin.io
     const BIN_ID = '6af1955dffd5d16053b2fcb7';
-    const API_KEY = '$2a$10$tPDvcNxXaQBCTxl.myb40OZc13gfYmRl.a2NxailYCKVyOLrU2yii';
-    const USER_ID = 'romen83'; // однаковий на планшеті й ТБ
+    const API_KEY = '$2a$10$tPDvcNxXaQBCTxl.myb40OZc13gfYmRl.a2NxaiLYCKVy0LrU2yii';
+    const USER_ID = 'romen83';
 
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-    // 1. Функція збереження прогресу в JSONBin
     function saveProgress(data) {
         if (!data || !data.card || !data.card.id) return;
         const movieId = String(data.card.id);
@@ -38,10 +36,12 @@
                 body: JSON.stringify(db)
             });
         })
+        .then(() => {
+            console.log('Lampa Sync: Progress saved successfully!');
+        })
         .catch(err => console.error('Lampa Sync Save Error:', err));
     }
 
-    // 2. Функція підтягування прогресу з JSONBin (для синхронізації на ТБ)
     function restoreProgress(card) {
         if (!card || !card.id) return;
         const movieId = String(card.id);
@@ -52,59 +52,50 @@
         .then(res => res.json())
         .then(response => {
             let db = response.record || {};
-            if (db.movies && db.movies[movieId]) {
-                let saved = db.movies[movieId];
-                if (saved.time > 0) {
-                    // Передаємо час у локальний Timeline Lampa
-                    Lampa.Timeline.update({
-                        hash: card.id,
-                        time: saved.time,
-                        duration: saved.duration,
-                        percent: saved.duration ? Math.round((saved.time / saved.duration) * 100) : 0
-                    });
-                }
+            if (!db.movies || !db.movies[movieId]) return;
+
+            let item = db.movies[movieId];
+            if (item.time && item.time > 5) {
+                Lampa.Storage.set('time_' + movieId, item.time);
+                console.log('Lampa Sync: Restored time ->', item.time);
             }
         })
-        .catch(err => console.error('Lampa Sync Restore Error:', err));
+        .catch(err => console.error('Lampa Sync Load Error:', err));
     }
 
-    // 3. Відстеження внутрішнього плеєра Lampa
-    Lampa.Listener.follow('player', function (e) {
-        if (e.type === 'timeupdate' || e.type === 'destroy') {
-            if (e.target && e.target.card && e.target.time > 0) {
+    // Відстежуємо запуск фільму
+    Lampa.Listener.follow('activity', function (e) {
+        if (e.type === 'start' && e.object && e.object.card) {
+            restoreProgress(e.object.card);
+        }
+    });
+
+    // Зберігаємо прогрес під час перегляду (кожні зміни часу) та при закритті
+    Lampa.Player.listener.follow('timeupdate', function (e) {
+        if (e.target && e.target.card && e.target.time > 0) {
+            // Зберігаємо кожні 30 секунд щоб не перевантажувати мережу
+            if (Math.round(e.target.time) % 30 === 0) {
                 saveProgress({
                     card: e.target.card,
                     time: e.target.time,
-                    duration: e.target.duration
+                    duration: e.target.duration()
                 });
             }
         }
     });
 
-    // 4. Відстеження зовнішніх плеєрів (MX Player, Just Player тощо)
-    // Перехоплюємо повернення з будь-якого зовнішнього Android-плеєра
-    Lampa.Listener.follow('activity', function (e) {
-        // При відкритті картки фільму — зчитуємо збережений час із хмари
-        if (e.type === 'start' && e.object && e.object.card) {
-            restoreProgress(e.object.card);
-        }
+    Lampa.Player.listener.follow('destroy', function (e) {
+        let current_card = Lampa.Player.data().movie;
+        let current_time = Lampa.Player.position();
+        let current_duration = Lampa.Player.duration();
 
-        // При закритті картки або поверненні із зовнішнього плеєра (Just Player / MX Player)
-        if (e.type === 'back' || e.type === 'destroy' || e.type === 'intent') {
-            let activeActivity = Lampa.Activity.active();
-            if (activeActivity && activeActivity.card) {
-                let currentCard = activeActivity.card;
-                let viewData = Lampa.Timeline.view(currentCard.id);
-                if (viewData && viewData.time) {
-                    saveProgress({
-                        card: currentCard,
-                        time: viewData.time,
-                        duration: viewData.duration || 0
-                    });
-                }
-            }
+        if (current_card) {
+            saveProgress({
+                card: current_card,
+                time: current_time,
+                duration: current_duration
+            });
         }
     });
 
-    console.log('JSONBin Sync Plugin (MX Player & Just Player) loaded successfully.');
 })();
