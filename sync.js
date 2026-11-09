@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const BIN_ID = '6af1955dffd5d16053b2fcb7';
+    const BIN_ID = '6af1c600ac6210605a79cb20';
     const API_KEY = '$2a$10$tPDvcNxXaQBCTxl.myb40OZc13gfYmRl.a2NxaiLYCKVy0LrU2yii';
     const USER_ID = 'romen83';
 
