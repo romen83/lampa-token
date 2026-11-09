@@ -10,6 +10,7 @@
     function saveProgress(data) {
         if (!data || !data.card || !data.card.id) return;
         const movieId = String(data.card.id);
+        if (!data.time || data.time < 5) return; // Ігноруємо надто короткий перегляд
 
         fetch(JSONBIN_URL + '/latest', {
             headers: { 'X-Master-Key': API_KEY }
@@ -24,7 +25,7 @@
                 title: data.card.title || data.card.name,
                 time: Math.round(data.time),
                 duration: Math.round(data.duration || 0),
-                updated_at: Date.now()
+                updated_at: Date.Now?.() || Date.now()
             };
 
             return fetch(JSONBIN_URL, {
@@ -57,44 +58,40 @@
             let item = db.movies[movieId];
             if (item.time && item.time > 5) {
                 Lampa.Storage.set('time_' + movieId, item.time);
+                if (Lampa.Timeline && Lampa.Timeline.set) {
+                    Lampa.Timeline.set({
+                        card: card,
+                        time: item.time,
+                        duration: item.duration || 0
+                    });
+                }
                 console.log('Lampa Sync: Restored time ->', item.time);
             }
         })
         .catch(err => console.error('Lampa Sync Load Error:', err));
     }
 
-    // Відстежуємо запуск фільму
+    // Перехоплюємо збереження історії Лампи (працює і з зовнішніми плеєрами)
+    if (typeof Lampa !== 'undefined' && Lampa.Timeline) {
+        let originalTimelineSet = Lampa.Timeline.set;
+        Lampa.Timeline.set = function (data) {
+            if (originalTimelineSet) {
+                originalTimelineSet.apply(this, arguments);
+            }
+            if (data && data.card && data.card.id) {
+                saveProgress({
+                    card: data.card,
+                    time: data.time,
+                    duration: data.duration
+                });
+            }
+        };
+    }
+
+    // Відновлюємо прогрес при відкритті картки фільму/серіалу
     Lampa.Listener.follow('activity', function (e) {
         if (e.type === 'start' && e.object && e.object.card) {
             restoreProgress(e.object.card);
-        }
-    });
-
-    // Зберігаємо прогрес під час перегляду (кожні зміни часу) та при закритті
-    Lampa.Player.listener.follow('timeupdate', function (e) {
-        if (e.target && e.target.card && e.target.time > 0) {
-            // Зберігаємо кожні 30 секунд щоб не перевантажувати мережу
-            if (Math.round(e.target.time) % 30 === 0) {
-                saveProgress({
-                    card: e.target.card,
-                    time: e.target.time,
-                    duration: e.target.duration()
-                });
-            }
-        }
-    });
-
-    Lampa.Player.listener.follow('destroy', function (e) {
-        let current_card = Lampa.Player.data().movie;
-        let current_time = Lampa.Player.position();
-        let current_duration = Lampa.Player.duration();
-
-        if (current_card) {
-            saveProgress({
-                card: current_card,
-                time: current_time,
-                duration: current_duration
-            });
         }
     });
 
